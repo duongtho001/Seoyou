@@ -12,11 +12,11 @@ const languageMap: { [key: string]: string } = {
   'ko': '한국어',
 };
 
-export const analyzeYoutubeVideo = async (videoDetails: VideoDetails, videoId: string, languageCode: string): Promise<string> => {
-  if (!process.env.API_KEY) {
-    throw new Error("API key is not configured.");
+export const analyzeYoutubeVideo = async (videoDetails: VideoDetails, videoId: string, languageCode: string, apiKey: string): Promise<string> => {
+  if (!apiKey) {
+    throw new Error("Gemini API key is not provided.");
   }
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: apiKey });
   const fullVideoUrl = `https://www.youtube.com/watch?v=${videoId}`;
   const languageName = languageMap[languageCode] || 'the specified language';
 
@@ -136,11 +136,11 @@ Mô tả tập trung vào việc lặp lại từ khóa chính 5 lần, sử d�
 };
 
 
-export const recreateThumbnail = async (imageUrl: string, prompt: string): Promise<string> => {
-   if (!process.env.API_KEY) {
-    throw new Error("API key is not configured.");
+export const recreateThumbnail = async (imageUrl: string, prompt: string, apiKey: string): Promise<string> => {
+   if (!apiKey) {
+    throw new Error("Gemini API key is not provided.");
   }
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: apiKey });
   try {
     const base64ImageData = await imageUrlToBase64(imageUrl);
 

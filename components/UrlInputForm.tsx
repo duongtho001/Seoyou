@@ -7,9 +7,10 @@ interface UrlInputFormProps {
   setSelectedLanguage: (language: string) => void;
   onAnalyze: () => void;
   isLoading: boolean;
+  hasApiKeys: boolean;
 }
 
-const UrlInputForm: React.FC<UrlInputFormProps> = ({ url, setUrl, selectedLanguage, setSelectedLanguage, onAnalyze, isLoading }) => {
+const UrlInputForm: React.FC<UrlInputFormProps> = ({ url, setUrl, selectedLanguage, setSelectedLanguage, onAnalyze, isLoading, hasApiKeys }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onAnalyze();
@@ -53,10 +54,11 @@ const UrlInputForm: React.FC<UrlInputFormProps> = ({ url, setUrl, selectedLangua
               <option value="ko">한국어 (Korean)</option>
             </select>
           </div>
+          {!hasApiKeys && <p className="text-sm text-center text-red-600">Vui lòng thêm Gemini API Key trong phần Cài đặt để sử dụng tính năng này.</p>}
           <button
             type="submit"
             className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold py-3 px-6 rounded-lg hover:from-purple-700 hover:to-pink-700 transition duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-            disabled={isLoading || !url}
+            disabled={isLoading || !url || !hasApiKeys}
           >
             {isLoading ? (
               <>
