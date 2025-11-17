@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import SparklesIcon from './icons/SparklesIcon';
 
@@ -6,9 +7,10 @@ interface ThumbnailCopierProps {
   generatedThumbnail: string | null;
   onRecreate: (prompt: string) => void;
   isLoading: boolean;
+  hasGeminiKeys: boolean;
 }
 
-const ThumbnailCopier: React.FC<ThumbnailCopierProps> = ({ originalThumbnailUrl, generatedThumbnail, onRecreate, isLoading }) => {
+const ThumbnailCopier: React.FC<ThumbnailCopierProps> = ({ originalThumbnailUrl, generatedThumbnail, onRecreate, isLoading, hasGeminiKeys }) => {
   const [prompt, setPrompt] = useState('Tạo một thumbnail tương tự với phong cách điện ảnh, màu sắc rực rỡ và văn bản nổi bật.');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -60,7 +62,7 @@ const ThumbnailCopier: React.FC<ThumbnailCopierProps> = ({ originalThumbnailUrl,
               ) : generatedThumbnail ? (
                 <img src={generatedThumbnail} alt="Generated Thumbnail" className="rounded-lg w-full aspect-video object-cover" />
               ) : (
-                <div className="text-gray-500">Kết quả sẽ hiển thị ở đây</div>
+                <div className="text-gray-500">{!hasGeminiKeys ? "Vui lòng thêm API Key" : "Kết quả sẽ hiển thị ở đây"}</div>
               )}
             </div>
             {!isLoading && generatedThumbnail && (
@@ -90,12 +92,13 @@ const ThumbnailCopier: React.FC<ThumbnailCopierProps> = ({ originalThumbnailUrl,
           placeholder="Mô tả ý tưởng thumbnail của bạn..."
           rows={3}
           className="w-full bg-gray-100 border border-gray-300 text-gray-800 rounded-lg p-3 focus:ring-2 focus:ring-pink-500 focus:border-pink-500 transition duration-200"
-          disabled={isLoading}
+          disabled={isLoading || !hasGeminiKeys}
         />
         <button
           type="submit"
           className="mt-4 w-full bg-gradient-to-r from-pink-600 to-red-600 text-white font-bold py-3 px-6 rounded-lg hover:from-pink-700 hover:to-red-700 transition duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          disabled={isLoading || !prompt}
+          disabled={isLoading || !prompt || !hasGeminiKeys}
+          title={!hasGeminiKeys ? "Vui lòng thêm Gemini API Key trong Cài đặt" : ""}
         >
           <SparklesIcon />
           {isLoading ? 'Đang tạo...' : 'Tạo lại Thumbnail'}
