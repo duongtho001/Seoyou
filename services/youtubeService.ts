@@ -1,11 +1,14 @@
-import type { VideoDetails } from '../types';
+
+import type { VideoDetails, SearchResultItem, VideoStatistic } from '../types';
 
 const VIDEOS_API_ENDPOINT = 'https://www.googleapis.com/youtube/v3/videos';
 const CHANNELS_API_ENDPOINT = 'https://www.googleapis.com/youtube/v3/channels';
+const SEARCH_API_ENDPOINT = 'https://www.googleapis.com/youtube/v3/search';
 
 // Interface for the video API response
 interface YouTubeVideoApiResponse {
     items: {
+        id: string;
         snippet: {
             publishedAt: string;
             title: string;
@@ -13,6 +16,11 @@ interface YouTubeVideoApiResponse {
             channelId: string;
             channelTitle: string;
             tags?: string[];
+            thumbnails: {
+                default: { url: string; };
+                medium: { url: string; };
+                high: { url: string; };
+            };
         };
         contentDetails: {
             duration: string;
@@ -52,6 +60,25 @@ interface YouTubeChannelApiResponse {
         };
         status?: {
             madeForKids?: boolean;
+        };
+    }[];
+}
+
+// Interface for Search API response
+interface YouTubeSearchApiResponse {
+    items: {
+        id: {
+            videoId: string;
+        };
+        snippet: {
+            publishedAt: string;
+            title: string;
+            channelTitle: string;
+            thumbnails: {
+                default: { url: string; };
+                medium: { url: string; };
+                high: { url: string; };
+            };
         };
     }[];
 }
@@ -101,7 +128,7 @@ const parseTopicDetails = (topicDetails?: { topicCategories?: string[] }): strin
 
 
 export const getVideoDetails = async (videoId: string, apiKey: string): Promise<VideoDetails> => {
-    // Added 'topicDetails' and 'status' to the parts being requested
+    // Added 'topicDetails' to the parts being requested for a single video
     const videoUrl = `${VIDEOS_API_ENDPOINT}?id=${videoId}&key=${apiKey}&part=snippet,contentDetails,statistics,topicDetails`;
 
     try {
@@ -124,7 +151,6 @@ export const getVideoDetails = async (videoId: string, apiKey: string): Promise<
         const { channelId } = snippet;
 
         // Step 2: Fetch Comprehensive Channel Details
-        // Added 'topicDetails' and 'status' to the parts being requested
         const channelUrl = `${CHANNELS_API_ENDPOINT}?id=${channelId}&key=${apiKey}&part=snippet,statistics,brandingSettings,topicDetails,status`;
         let channelDetails = {
             subscriberCount: '0',
@@ -187,5 +213,103 @@ export const getVideoDetails = async (videoId: string, apiKey: string): Promise<
             throw new Error(`Không thể lấy chi tiết video từ YouTube. ${error.message}`);
         }
         throw new Error("Không thể lấy chi tiết video từ YouTube do lỗi không xác định.");
+    }
+};
+
+export const searchVideos = async (query: string, apiKey: string): Promise<SearchResultItem[]> => {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const publishedAfter = sevenDaysAgo.toISOString();
+
+    const searchUrl = `${SEARCH_API_ENDPOINT}?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=20&key=${apiKey}&regionCode=VN&publishedAfter=${publishedAfter}&order=date`;
+
+    try {
+        const response = await fetch(searchUrl);
+        if (!response.ok) {
+            const errorData = await response.json();
+            const errorMessage = errorData?.error?.message || `Lỗi API YouTube (Search): ${response.statusText}`;
+            throw new Error(errorMessage);
+        }
+
+        const data: YouTubeSearchApiResponse = await response.json();
+
+        return data.items.map(item => ({
+            videoId: item.id.videoId,
+            title: item.snippet.title,
+            channelTitle: item.snippet.channelTitle,
+            thumbnailUrl: item.snippet.thumbnails.medium.url,
+            publishedAt: item.snippet.publishedAt,
+        }));
+
+    } catch (error) {
+        console.error("Error searching videos:", error);
+        if (error instanceof Error) {
+            throw new Error(`Không thể tìm kiếm video. ${error.message}`);
+        }
+        throw new Error("Không thể tìm kiếm video do lỗi không xác định.");
+    }
+};
+
+export const getVideoStatistics = async (videoIds: string[], apiKey: string): Promise<VideoStatistic[]> => {
+    if (videoIds.length === 0) return [];
+    // API allows up to 50 IDs per request
+    const idsString = videoIds.slice(0, 50).join(',');
+    const statsUrl = `${VIDEOS_API_ENDPOINT}?id=${idsString}&key=${apiKey}&part=snippet,statistics`;
+
+    try {
+        const response = await fetch(statsUrl);
+        if (!response.ok) {
+            const errorData = await response.json();
+            const errorMessage = errorData?.error?.message || `Lỗi API YouTube (Videos): ${response.statusText}`;
+            throw new Error(errorMessage);
+        }
+
+        const data: YouTubeVideoApiResponse = await response.json();
+
+        return data.items.map(item => ({
+            videoId: item.id,
+            title: item.snippet.title,
+            thumbnailUrl: item.snippet.thumbnails.medium.url,
+            viewCount: new Intl.NumberFormat().format(parseInt(item.statistics?.viewCount || '0')),
+            likeCount: new Intl.NumberFormat().format(parseInt(item.statistics?.likeCount || '0')),
+            commentCount: new Intl.NumberFormat().format(parseInt(item.statistics?.commentCount || '0')),
+        }));
+
+    } catch (error) {
+        console.error("Error fetching video statistics:", error);
+        if (error instanceof Error) {
+            throw new Error(`Không thể lấy thống kê video. ${error.message}`);
+        }
+        throw new Error("Không thể lấy thống kê video do lỗi không xác định.");
+    }
+};
+
+export const getTrendingVideos = async (regionCode: string, apiKey: string): Promise<SearchResultItem[]> => {
+    const trendingUrl = `${VIDEOS_API_ENDPOINT}?part=snippet&chart=mostPopular&regionCode=${regionCode}&maxResults=25&key=${apiKey}`;
+
+    try {
+        const response = await fetch(trendingUrl);
+        if (!response.ok) {
+            const errorData = await response.json();
+            const errorMessage = errorData?.error?.message || `Lỗi API YouTube (Trending): ${response.statusText}`;
+            throw new Error(errorMessage);
+        }
+
+        const data: YouTubeVideoApiResponse = await response.json();
+
+        return data.items.map(item => ({
+            videoId: item.id,
+            title: item.snippet.title,
+            channelTitle: item.snippet.channelTitle,
+            thumbnailUrl: item.snippet.thumbnails.medium.url,
+            publishedAt: item.snippet.publishedAt,
+        }));
+
+    } catch (error) {
+        console.error("Error fetching trending videos:", error);
+        if (error instanceof Error) {
+            throw new Error(`Không thể lấy video thịnh hành. ${error.message}`);
+        }
+        throw new Error("Không thể lấy video thịnh hành do lỗi không xác định.");
     }
 };
