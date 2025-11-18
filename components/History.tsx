@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { HistoryItem } from '../types';
 import ClockIcon from './icons/ClockIcon';
@@ -25,23 +24,21 @@ const History: React.FC<HistoryProps> = ({ history, onItemClick, onDeleteItem, o
           <ClockIcon />
           Lịch sử Phân tích
         </h2>
-        {history.length > 0 && (
-            <button
-                onClick={onClearHistory}
-                className="text-sm text-red-500 hover:text-red-700 font-semibold flex items-center gap-1 transition-colors"
-                aria-label="Clear all history"
-            >
-                <TrashIcon />
-                Xóa tất cả
-            </button>
-        )}
+        <button
+          onClick={onClearHistory}
+          className="text-sm text-red-500 hover:text-red-700 font-semibold flex items-center gap-1 transition-colors"
+          aria-label="Clear all history"
+        >
+          <TrashIcon />
+          Xóa tất cả
+        </button>
       </div>
-      <ul className="space-y-2 max-h-60 overflow-y-auto pr-2">
+      <ul className="space-y-2">
         {history.map((item) => (
           <li key={item.videoId} className="group flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 transition-colors">
             <button
               onClick={() => onItemClick(item.url)}
-              className="text-left flex-grow truncate"
+              className="text-left flex-grow"
             >
               <p className="text-gray-700 font-medium truncate group-hover:text-purple-600" title={item.title}>
                 {item.title}
@@ -51,11 +48,8 @@ const History: React.FC<HistoryProps> = ({ history, onItemClick, onDeleteItem, o
               </p>
             </button>
             <button
-              onClick={(e) => {
-                  e.stopPropagation(); // Prevent re-analyzing when deleting
-                  onDeleteItem(item.videoId)
-              }}
-              className="ml-4 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+              onClick={() => onDeleteItem(item.videoId)}
+              className="ml-4 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
               aria-label={`Delete ${item.title}`}
             >
               <XCircleIcon />

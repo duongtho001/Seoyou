@@ -7,10 +7,10 @@ interface UrlInputFormProps {
   setSelectedLanguage: (language: string) => void;
   onAnalyze: () => void;
   isLoading: boolean;
-  hasGeminiKeys: boolean;
+  hasApiKeys: boolean;
 }
 
-const UrlInputForm: React.FC<UrlInputFormProps> = ({ url, setUrl, selectedLanguage, setSelectedLanguage, onAnalyze, isLoading, hasGeminiKeys }) => {
+const UrlInputForm: React.FC<UrlInputFormProps> = ({ url, setUrl, selectedLanguage, setSelectedLanguage, onAnalyze, isLoading, hasApiKeys }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onAnalyze();
@@ -21,12 +21,15 @@ const UrlInputForm: React.FC<UrlInputFormProps> = ({ url, setUrl, selectedLangua
       <form onSubmit={handleSubmit}>
         <div className="space-y-4">
           <div>
+            <label htmlFor="youtube-url" className="block text-lg font-medium text-gray-700 mb-2">
+              Dán link YouTube đối thủ vào đây
+            </label>
             <input
               id="youtube-url"
               type="text"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="Dán link YouTube cần phân tích vào đây..."
+              placeholder="https://www.youtube.com/watch?v=..."
               className="w-full bg-gray-100 border border-gray-300 text-gray-800 rounded-lg px-4 py-3 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition duration-200"
               disabled={isLoading}
             />
@@ -51,11 +54,11 @@ const UrlInputForm: React.FC<UrlInputFormProps> = ({ url, setUrl, selectedLangua
               <option value="ko">한국어 (Korean)</option>
             </select>
           </div>
+          {!hasApiKeys && <p className="text-sm text-center text-red-600">Vui lòng thêm Gemini API Key trong phần Cài đặt để sử dụng tính năng này.</p>}
           <button
             type="submit"
             className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold py-3 px-6 rounded-lg hover:from-purple-700 hover:to-pink-700 transition duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-            disabled={isLoading || !url || !hasGeminiKeys}
-            title={!hasGeminiKeys ? "Vui lòng thêm Gemini API Key trong Cài đặt" : ""}
+            disabled={isLoading || !url || !hasApiKeys}
           >
             {isLoading ? (
               <>
