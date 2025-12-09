@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import type { VideoDetails } from '../types';
 import { imageUrlToBase64 } from "../utils/helpers";
@@ -13,10 +14,7 @@ const languageMap: { [key: string]: string } = {
 };
 
 export const analyzeYoutubeVideo = async (videoDetails: VideoDetails, videoId: string, languageCode: string, apiKey: string): Promise<string> => {
-  if (!apiKey) {
-    throw new Error("Gemini API key is not provided.");
-  }
-  const ai = new GoogleGenAI({ apiKey: apiKey });
+  const ai = new GoogleGenAI({ apiKey });
   const fullVideoUrl = `https://www.youtube.com/watch?v=${videoId}`;
   const languageName = languageMap[languageCode] || 'the specified language';
 
@@ -108,8 +106,7 @@ Mô tả tập trung vào việc lặp lại từ khóa chính 5 lần, sử d�
   
   try {
     const response = await ai.models.generateContent({
-      // FIX: Use gemini-2.5-pro for complex text generation tasks like SEO analysis.
-      model: 'gemini-2.5-pro',
+      model: 'gemini-2.5-flash',
       contents: prompt,
     });
 
@@ -118,29 +115,20 @@ Mô tả tập trung vào việc lặp lại từ khóa chính 5 lần, sử d�
   } catch (error) {
     console.error("Error analyzing video with Gemini:", error);
     if (error instanceof Error) {
-        try {
-            // The API sometimes returns a JSON string in the error message for rate limits or other issues.
-            const errorData = JSON.parse(error.message);
-            if (errorData?.error?.code === 429) {
-                // Standardized quota error message to be caught in App.tsx
-                throw new Error("Lỗi hạn ngạch API 429.");
-            }
-        } catch (e) {
-            // Not a JSON error, or not the one we're looking for.
-            // The original error will be thrown below.
+        if (error.message.includes('API key not valid')) {
+            throw new Error('Khóa API Gemini không hợp lệ hoặc chưa được cung cấp.');
         }
-        throw error; // Re-throw original error if it's not a handled one.
+        if (error.message.includes('429') || error.message.toLowerCase().includes('quota')) {
+            throw new Error('Hạn ngạch API Gemini đã bị vượt quá. Vui lòng thử lại sau.');
+        }
     }
-    throw new Error("Không thể phân tích video. Vui lòng thử lại.");
+    throw new Error("Không thể phân tích video. Đã xảy ra lỗi khi giao tiếp với AI.");
   }
 };
 
 
 export const recreateThumbnail = async (imageUrl: string, prompt: string, apiKey: string): Promise<string> => {
-   if (!apiKey) {
-    throw new Error("Gemini API key is not provided.");
-  }
-  const ai = new GoogleGenAI({ apiKey: apiKey });
+  const ai = new GoogleGenAI({ apiKey });
   try {
     const base64ImageData = await imageUrlToBase64(imageUrl);
 
@@ -173,8 +161,6 @@ export const recreateThumbnail = async (imageUrl: string, prompt: string, apiKey
         throw new Error("AI không trả về bất kỳ kết quả nào. Phản hồi trống.");
     }
 
-    // FIX: Use optional chaining (?.) to safely access nested properties.
-    // This prevents the "Cannot read properties of undefined (reading 'parts')" error.
     for (const part of response.candidates[0]?.content?.parts || []) {
         if (part.inlineData) {
             const base64ImageBytes: string = part.inlineData.data;
@@ -191,23 +177,15 @@ export const recreateThumbnail = async (imageUrl: string, prompt: string, apiKey
 
   } catch (error) {
     console.error("Error recreating thumbnail with Gemini:", error);
-    
     if (error instanceof Error) {
-        try {
-            // The API sometimes returns a JSON string in the error message for rate limits.
-            const errorData = JSON.parse(error.message);
-            if (errorData?.error?.code === 429) {
-                // Standardized quota error message to be caught in App.tsx
-                throw new Error("Lỗi hạn ngạch API 429.");
-            }
-        } catch (e) {
-            // This means the error message was not a JSON string, so it's a different error.
-            // We will just throw the original error below.
+        if (error.message.includes('API key not valid')) {
+            throw new Error('Khóa API Gemini không hợp lệ hoặc chưa được cung cấp.');
         }
-        
-        throw error;
+        if (error.message.includes('429') || error.message.toLowerCase().includes('quota')) {
+            throw new Error('Hạn ngạch API Gemini đã bị vượt quá. Vui lòng thử lại sau.');
+        }
+        throw error; // Re-throw other handled errors
     }
-    
     throw new Error("Không thể tạo thumbnail mới. Vui lòng thử lại.");
   }
 };
