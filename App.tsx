@@ -1,24 +1,18 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { analyzeYoutubeVideo, recreateThumbnail } from './services/geminiService';
-import { getVideoDetails, searchVideos, getVideoStatistics, getTrendingVideos } from './services/youtubeService';
+import { getVideoDetails } from './services/youtubeService';
 import { extractVideoId, isValidYoutubeUrl } from './utils/helpers';
-import type { HistoryItem, SearchResultItem } from './types';
+import type { HistoryItem } from './types';
 import UrlInputForm from './components/UrlInputForm';
 import SeoAnalysisDisplay from './components/SeoAnalysisDisplay';
 import ThumbnailCopier from './components/ThumbnailCopier';
 import Loader from './components/Loader';
 import History from './components/History';
-import Discovery from './components/Discovery';
-import Statistics from './components/Statistics';
-import Trending from './components/Trending';
-import ZaloIcon from './components/icons/ZaloIcon';
 import ApiKeyManager from './components/ApiKeyManager';
 import SettingsIcon from './components/icons/SettingsIcon';
 
-
 const App: React.FC = () => {
-  // Hardcode the YouTube API key as provided in the initial setup.
+  // Hardcode the YouTube API key and remove the input field
   const YOUTUBE_API_KEY = 'AIzaSyDwTSvkH1mvEuXwjbnE8OqpBlI3SMZTbDk';
 
   const [youtubeUrl, setYoutubeUrl] = useState<string>('');
@@ -31,38 +25,34 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [isAnalysisTriggeredByHistory, setIsAnalysisTriggeredByHistory] = useState(false);
-  
-  // State for Discovery module
-  const [discoveryQuery, setDiscoveryQuery] = useState<string>('');
-  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
-  const [isSearching, setIsSearching] = useState<boolean>(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
 
-  // State for API Key Management
-  const [geminiApiKeys, setGeminiApiKeys] = useState<string[]>([]);
-  const [currentGeminiKeyIndex, setCurrentGeminiKeyIndex] = useState(0);
-  const [isApiKeyManagerOpen, setIsApiKeyManagerOpen] = useState(false);
+  // API Key Management State
+  const [apiKeys, setApiKeys] = useState<string[]>([]);
+  const [currentApiKeyIndex, setCurrentApiKeyIndex] = useState<number>(0);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
 
-  // Load data from localStorage on initial render
+  // Load history and API keys from localStorage on initial render
   useEffect(() => {
     try {
       const storedHistory = localStorage.getItem('youtube-seo-history');
-      if (storedHistory) setHistory(JSON.parse(storedHistory));
-      
-      const storedGeminiKeys = localStorage.getItem('gemini-api-keys');
-      if (storedGeminiKeys) {
-        const parsedKeys = JSON.parse(storedGeminiKeys);
+      if (storedHistory) {
+        setHistory(JSON.parse(storedHistory));
+      }
+      const storedApiKeys = localStorage.getItem('gemini-api-keys');
+      if (storedApiKeys) {
+        const parsedKeys = JSON.parse(storedApiKeys);
         if (Array.isArray(parsedKeys) && parsedKeys.length > 0) {
-          setGeminiApiKeys(parsedKeys);
+          setApiKeys(parsedKeys);
         } else {
-          setIsApiKeyManagerOpen(true); // Open manager if keys are invalid or empty
+          setIsSettingsOpen(true); // Prompt for keys if stored value is invalid or empty
         }
       } else {
-        setIsApiKeyManagerOpen(true); // Open manager if no keys are stored
+        setIsSettingsOpen(true); // Prompt for keys on first visit
       }
     } catch (error) {
       console.error("Failed to load data from localStorage", error);
+      setIsSettingsOpen(true);
     }
   }, []);
 
@@ -75,24 +65,25 @@ const App: React.FC = () => {
     }
   }, [history]);
 
-  const handleSaveApiKeys = (keys: string[]) => {
-    setGeminiApiKeys(keys);
-    setCurrentGeminiKeyIndex(0); // Reset to the first key
+  const handleSaveApiKeys = useCallback((keys: string[]) => {
+    setApiKeys(keys);
+    setCurrentApiKeyIndex(0); // Reset to the first key
     try {
-        localStorage.setItem('gemini-api-keys', JSON.stringify(keys));
+      localStorage.setItem('gemini-api-keys', JSON.stringify(keys));
     } catch (error) {
-        console.error("Failed to save Gemini API keys to localStorage", error);
+      console.error("Failed to save API keys to localStorage", error);
     }
-  };
+  }, []);
+
 
   const handleAnalysis = useCallback(async () => {
-    if (geminiApiKeys.length === 0) {
-      setError("Vui lòng cung cấp Gemini API Key trong phần Cài đặt.");
-      setIsApiKeyManagerOpen(true);
-      return;
-    }
     if (!isValidYoutubeUrl(youtubeUrl)) {
       setError('Vui lòng nhập một URL YouTube hợp lệ.');
+      return;
+    }
+    if (apiKeys.length === 0) {
+      setError('Vui lòng thêm Gemini API Key trong phần Cài đặt.');
+      setIsSettingsOpen(true);
       return;
     }
     setError(null);
@@ -101,6 +92,9 @@ const App: React.FC = () => {
     setGeneratedThumbnail(null);
     setIsLoadingAnalysis(true);
 
+    let success = false;
+    let keyIndex = currentApiKeyIndex;
+
     const videoId = extractVideoId(youtubeUrl);
     if (!videoId) {
       setError('Không thể trích xuất ID video từ URL.');
@@ -108,55 +102,49 @@ const App: React.FC = () => {
       return;
     }
 
-    let videoDetails;
     try {
-        videoDetails = await getVideoDetails(videoId, YOUTUBE_API_KEY);
-        setOriginalThumbnailUrl(`https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`);
-    } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Lỗi khi lấy chi tiết video.';
-        setError(errorMessage);
-        setIsLoadingAnalysis(false);
-        return;
-    }
-    
-    let success = false;
-    let keyIndex = currentGeminiKeyIndex;
+      const videoDetails = await getVideoDetails(videoId, YOUTUBE_API_KEY);
+      setOriginalThumbnailUrl(`https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`);
 
-    for (let i = 0; i < geminiApiKeys.length; i++) {
-        const apiKey = geminiApiKeys[keyIndex];
+      while (!success && keyIndex < apiKeys.length) {
         try {
-            const result = await analyzeYoutubeVideo(videoDetails, videoId, selectedLanguage, apiKey);
-            setAnalysisResult(result);
-            success = true;
-            setCurrentGeminiKeyIndex(keyIndex); // Save the working key index for next time
-            break; // Exit loop on success
+          const currentKey = apiKeys[keyIndex];
+          const result = await analyzeYoutubeVideo(videoDetails, videoId, selectedLanguage, currentKey);
+          setAnalysisResult(result);
+          success = true;
+
+          setHistory(prevHistory => {
+            const newHistoryItem: HistoryItem = { url: youtubeUrl, title: videoDetails.title, videoId: videoId };
+            const filteredHistory = prevHistory.filter(item => item.videoId !== newHistoryItem.videoId);
+            return [newHistoryItem, ...filteredHistory].slice(0, 15);
+          });
+
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : '';
-            console.warn(`Key at index ${keyIndex} failed: ${errorMessage}`);
-            if (errorMessage.toLowerCase().includes('quota')) {
-                keyIndex = (keyIndex + 1) % geminiApiKeys.length; // Move to the next key
-            } else {
-                setError(errorMessage || "Đã xảy ra lỗi không xác định khi phân tích.");
-                break; // A different error occurred, stop trying
-            }
+          if (err instanceof Error && err.message.includes("429")) {
+            console.warn(`API key at index ${keyIndex} exhausted. Trying next.`);
+            keyIndex++;
+          } else {
+            throw err; // Re-throw other errors
+          }
         }
-    }
+      }
 
-    if (success) {
-      setHistory(prevHistory => {
-        const newHistoryItem: HistoryItem = { url: youtubeUrl, title: videoDetails.title, videoId: videoId };
-        const filteredHistory = prevHistory.filter(item => item.videoId !== newHistoryItem.videoId);
-        return [newHistoryItem, ...filteredHistory].slice(0, 15);
-      });
-    } else {
-        setError("Tất cả các Gemini API key đều đã hết hạn ngạch hoặc không hợp lệ. Vui lòng kiểm tra lại trong Cài đặt.");
-    }
-    
-    setIsLoadingAnalysis(false);
+      if (success) {
+        setCurrentApiKeyIndex(keyIndex);
+      } else {
+        throw new Error("Tất cả các API key đều đã hết hạn ngạch hoặc không hợp lệ. Vui lòng kiểm tra lại trong phần Cài đặt.");
+      }
 
-  }, [youtubeUrl, selectedLanguage, geminiApiKeys, currentGeminiKeyIndex]);
+    } catch (err) {
+      console.error(err);
+      const errorMessage = err instanceof Error ? err.message : 'Đã xảy ra lỗi không xác định khi phân tích.';
+      setError(errorMessage);
+    } finally {
+      setIsLoadingAnalysis(false);
+    }
+  }, [youtubeUrl, selectedLanguage, apiKeys, currentApiKeyIndex]);
   
-  // Effect to run analysis when triggered by a history click or discovery selection
+  // Effect to run analysis when triggered by a history click
   useEffect(() => {
     if (isAnalysisTriggeredByHistory) {
       handleAnalysis();
@@ -167,10 +155,6 @@ const App: React.FC = () => {
   const handleHistoryClick = useCallback((url: string) => {
     setYoutubeUrl(url);
     setIsAnalysisTriggeredByHistory(true);
-    const analysisSection = document.getElementById('analysis-section');
-    if (analysisSection) {
-       analysisSection.scrollIntoView({ behavior: 'smooth' });
-    }
   }, []);
 
   const handleDeleteItem = useCallback((videoId: string) => {
@@ -183,13 +167,13 @@ const App: React.FC = () => {
 
 
   const handleRecreateThumbnail = useCallback(async (prompt: string) => {
-     if (geminiApiKeys.length === 0) {
-      setError("Vui lòng cung cấp Gemini API Key trong phần Cài đặt.");
-      setIsApiKeyManagerOpen(true);
-      return;
-    }
     if (!originalThumbnailUrl) {
       setError('Không có thumbnail gốc để sao chép.');
+      return;
+    }
+     if (apiKeys.length === 0) {
+      setError('Vui lòng thêm Gemini API Key trong phần Cài đặt.');
+      setIsSettingsOpen(true);
       return;
     }
     setError(null);
@@ -197,150 +181,69 @@ const App: React.FC = () => {
     setIsGeneratingThumbnail(true);
 
     let success = false;
-    let keyIndex = currentGeminiKeyIndex;
-
-     for (let i = 0; i < geminiApiKeys.length; i++) {
-        const apiKey = geminiApiKeys[keyIndex];
-        try {
-            const newThumbnail = await recreateThumbnail(originalThumbnailUrl, prompt, apiKey);
-            setGeneratedThumbnail(newThumbnail);
-            success = true;
-            setCurrentGeminiKeyIndex(keyIndex);
-            break;
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : '';
-            console.warn(`Key at index ${keyIndex} failed: ${errorMessage}`);
-            if (errorMessage.toLowerCase().includes('quota')) {
-                keyIndex = (keyIndex + 1) % geminiApiKeys.length;
-            } else {
-                setError(errorMessage || 'Đã xảy ra lỗi không xác định khi tạo thumbnail.');
-                break;
-            }
-        }
-    }
-
-    if (!success) {
-         setError("Tất cả các Gemini API key đều đã hết hạn ngạch hoặc không hợp lệ. Vui lòng kiểm tra lại trong Cài đặt.");
-    }
-
-    setIsGeneratingThumbnail(false);
-  }, [originalThumbnailUrl, geminiApiKeys, currentGeminiKeyIndex]);
-  
-  const handleSearch = useCallback(async (query: string) => {
-    if (!query.trim()) {
-      setSearchError('Vui lòng nhập từ khóa để tìm kiếm.');
-      return;
-    }
-    setIsSearching(true);
-    setSearchError(null);
-    setSearchResults([]);
+    let keyIndex = currentApiKeyIndex;
 
     try {
-      const results = await searchVideos(query, YOUTUBE_API_KEY);
-      setSearchResults(results);
-      if (results.length === 0) {
-        setSearchError('Không tìm thấy video nào phù hợp.');
+       while (!success && keyIndex < apiKeys.length) {
+        try {
+          const currentKey = apiKeys[keyIndex];
+          const newThumbnail = await recreateThumbnail(originalThumbnailUrl, prompt, currentKey);
+          setGeneratedThumbnail(newThumbnail);
+          success = true;
+        } catch (err) {
+           if (err instanceof Error && err.message.includes("429")) {
+            console.warn(`API key at index ${keyIndex} exhausted. Trying next.`);
+            keyIndex++;
+          } else {
+            throw err; // Re-throw other errors
+          }
+        }
+      }
+
+       if (success) {
+        setCurrentApiKeyIndex(keyIndex);
+      } else {
+        throw new Error("Tất cả các API key đều đã hết hạn ngạch hoặc không hợp lệ. Vui lòng kiểm tra lại trong phần Cài đặt.");
       }
     } catch (err) {
       console.error(err);
-      const errorMessage = err instanceof Error ? err.message : 'Đã xảy ra lỗi khi tìm kiếm.';
-      setSearchError(errorMessage);
+      const errorMessage = err instanceof Error ? err.message : 'Đã xảy ra lỗi không xác định khi tạo thumbnail.';
+      setError(errorMessage);
     } finally {
-      setIsSearching(false);
+      setIsGeneratingThumbnail(false);
     }
-  }, []);
-
-  const handleVideoSelect = useCallback((videoId: string) => {
-    const url = `https://www.youtube.com/watch?v=${videoId}`;
-    setYoutubeUrl(url);
-    setIsAnalysisTriggeredByHistory(true);
-    const analysisSection = document.getElementById('analysis-section');
-    if (analysisSection) {
-       analysisSection.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, []);
-
-  // Handlers for new modules, passing the API key
-  const handleGetStats = useCallback((videoIds: string[]) => {
-    return getVideoStatistics(videoIds, YOUTUBE_API_KEY);
-  }, []);
-
-  const handleGetTrends = useCallback((regionCode: string) => {
-    return getTrendingVideos(regionCode, YOUTUBE_API_KEY);
-  }, []);
-
-  const handleTrendKeywordSelect = useCallback((keyword: string) => {
-    setDiscoveryQuery(keyword);
-    handleSearch(keyword);
-    
-    const discoverySection = document.getElementById('discovery-section');
-    if (discoverySection) {
-        discoverySection.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [handleSearch]);
-
-  const hasGeminiKeys = geminiApiKeys.length > 0;
+  }, [originalThumbnailUrl, apiKeys, currentApiKeyIndex]);
 
   return (
-    <div className="min-h-screen bg-gray-100 text-gray-800 font-sans p-4 sm:p-6 lg:p-8">
+    <>
       <ApiKeyManager
-        isOpen={isApiKeyManagerOpen}
-        onClose={() => setIsApiKeyManagerOpen(false)}
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
         onSave={handleSaveApiKeys}
-        initialKeys={geminiApiKeys}
+        initialKeys={apiKeys}
       />
-      <div className="max-w-6xl mx-auto">
-        <div className="absolute top-4 right-4 sm:top-6 sm:right-6 lg:top-8 lg:right-8">
+      <div className="min-h-screen bg-gray-100 text-gray-800 font-sans p-4 sm:p-6 lg:p-8">
+        <div className="max-w-4xl mx-auto">
+          <header className="text-center mb-8 relative">
+            <h1 className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
+              YouTube SEO Analyzer
+            </h1>
+             <p className="mt-2 text-lg text-gray-700 font-semibold">
+              by Đường Thọ - 0934315387
+            </p>
+            <p className="mt-2 text-lg text-gray-600">
+              Phân tích đối thủ và tối ưu hóa video của bạn để thống trị kết quả tìm kiếm.
+            </p>
             <button
-                onClick={() => setIsApiKeyManagerOpen(true)}
-                className="p-2 bg-white rounded-full shadow-md text-gray-600 hover:text-purple-600 hover:bg-gray-50 transition-colors"
-                aria-label="Open API Key Settings"
+              onClick={() => setIsSettingsOpen(true)}
+              className="absolute top-0 right-0 p-2 text-gray-500 hover:text-purple-600 transition-colors"
+              aria-label="Open API Key Settings"
             >
-                <SettingsIcon />
+              <SettingsIcon />
             </button>
-        </div>
-        
-        <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 mb-6 flex items-center justify-between flex-wrap gap-4">
-          <p className="text-sm font-semibold text-gray-700">
-            App của Thọ - 0934415387
-          </p>
-          <a 
-            href="https://zalo.me/g/sgkzgk550" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-blue-500 text-white text-sm font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            <ZaloIcon />
-            Tham Gia Nhóm zalo tạo app
-          </a>
-        </div>
+          </header>
 
-        <header className="text-center mb-8">
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
-            KeyTube
-          </h1>
-        </header>
-
-        <main className="space-y-8">
-          <div id="discovery-section">
-            <Discovery
-              query={discoveryQuery}
-              setQuery={setDiscoveryQuery}
-              onSearch={handleSearch}
-              onVideoSelect={handleVideoSelect}
-              results={searchResults}
-              isLoading={isSearching}
-              error={searchError}
-            />
-          </div>
-          
-          <div className="flex items-center" aria-hidden="true">
-            <div className="flex-grow border-t border-gray-300"></div>
-            <span className="flex-shrink mx-4 text-gray-500 font-semibold">HOẶC</span>
-            <div className="flex-grow border-t border-gray-300"></div>
-          </div>
-
-          <div id="analysis-section">
+          <main>
             <UrlInputForm
               url={youtubeUrl}
               setUrl={setYoutubeUrl}
@@ -348,55 +251,44 @@ const App: React.FC = () => {
               setSelectedLanguage={setSelectedLanguage}
               onAnalyze={handleAnalysis}
               isLoading={isLoadingAnalysis}
-              hasGeminiKeys={hasGeminiKeys}
+              hasApiKeys={apiKeys.length > 0}
             />
-          </div>
 
-          {error && (
-            <div className="mt-6 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg text-center" role="alert">
-              <p>{error}</p>
-            </div>
-          )}
+            <History
+              history={history}
+              onItemClick={handleHistoryClick}
+              onDeleteItem={handleDeleteItem}
+              onClearHistory={handleClearHistory}
+            />
 
-          {isLoadingAnalysis && <Loader message="Đang lấy dữ liệu và phân tích, vui lòng chờ..." />}
+            {error && (
+              <div className="mt-6 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg text-center" role="alert">
+                <p>{error}</p>
+              </div>
+            )}
 
-          {analysisResult && (
-            <div className="mt-8 space-y-8">
-              <SeoAnalysisDisplay analysisResult={analysisResult} />
-              {originalThumbnailUrl && (
-                <ThumbnailCopier
-                  originalThumbnailUrl={originalThumbnailUrl}
-                  generatedThumbnail={generatedThumbnail}
-                  onRecreate={handleRecreateThumbnail}
-                  isLoading={isGeneratingThumbnail}
-                  hasGeminiKeys={hasGeminiKeys}
-                />
-              )}
-            </div>
-          )}
+            {isLoadingAnalysis && <Loader message="Đang lấy dữ liệu và phân tích, vui lòng chờ..." />}
 
-          <History
-            history={history}
-            onItemClick={handleHistoryClick}
-            onDeleteItem={handleDeleteItem}
-            onClearHistory={handleClearHistory}
-          />
-          
-          <div className="space-y-8 mt-8">
-            <div className="text-center pt-4">
-                <h2 className="text-3xl font-bold text-gray-800">Module 2: Phân Tích Nâng Cao</h2>
-                <p className="text-gray-600 mt-2">Sử dụng các công cụ mạnh mẽ để nghiên cứu sâu hơn về thị trường.</p>
-            </div>
-            <Statistics onGetStats={handleGetStats} />
-            <Trending onGetTrends={handleGetTrends} onKeywordSelect={handleTrendKeywordSelect} />
-          </div>
-
-        </main>
-        <footer className="text-center mt-12 text-gray-500 text-sm">
-          <p>© {new Date().getFullYear()} KeyTube</p>
-        </footer>
+            {analysisResult && (
+              <div className="mt-8 space-y-8">
+                <SeoAnalysisDisplay analysisResult={analysisResult} />
+                {originalThumbnailUrl && (
+                  <ThumbnailCopier
+                    originalThumbnailUrl={originalThumbnailUrl}
+                    generatedThumbnail={generatedThumbnail}
+                    onRecreate={handleRecreateThumbnail}
+                    isLoading={isGeneratingThumbnail}
+                  />
+                )}
+              </div>
+            )}
+          </main>
+          <footer className="text-center mt-12 text-gray-500 text-sm">
+            <p>© {new Date().getFullYear()} Bản quyền thuộc về Đường Thọ</p>
+          </footer>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
